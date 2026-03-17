@@ -1,0 +1,1130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenClaw 底层逻辑原理 — 图文全解</title>
+  <style>
+    :root {
+      --red: #e94c3d;
+      --orange: #f39c12;
+      --blue: #2980b9;
+      --teal: #16a085;
+      --purple: #8e44ad;
+      --dark: #1a1a2e;
+      --dark2: #16213e;
+      --dark3: #0f3460;
+      --card: #1e293b;
+      --border: #334155;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #ff6b6b;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--dark);
+      color: var(--text);
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.7;
+    }
+    /* ── HERO ── */
+    .hero {
+      background: linear-gradient(135deg, #0f3460 0%, #16213e 50%, #1a1a2e 100%);
+      padding: 80px 40px 60px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 50% 0%, rgba(233,76,61,0.15) 0%, transparent 60%);
+    }
+    .hero-emoji { font-size: 80px; display: block; margin-bottom: 16px; animation: float 3s ease-in-out infinite; }
+    @keyframes float { 0%,100%{ transform: translateY(0); } 50%{ transform: translateY(-12px); } }
+    .hero h1 {
+      font-size: clamp(28px, 5vw, 52px);
+      font-weight: 800;
+      background: linear-gradient(135deg, #ff6b6b, #ffd93d, #6bcb77);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      margin-bottom: 16px;
+    }
+    .hero p { font-size: 18px; color: var(--muted); max-width: 640px; margin: 0 auto; }
+    .badge {
+      display: inline-block; margin-top: 24px; padding: 6px 18px;
+      background: rgba(233,76,61,0.2); border: 1px solid rgba(233,76,61,0.4);
+      border-radius: 20px; font-size: 13px; color: #ff9090;
+    }
+    /* ── LAYOUT ── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+    section { padding: 60px 0; }
+    section + section { border-top: 1px solid var(--border); }
+    /* ── SECTION TITLE ── */
+    .section-title {
+      display: flex; align-items: center; gap: 12px;
+      font-size: 26px; font-weight: 700; margin-bottom: 36px;
+    }
+    .section-title .num {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--red); display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 800; flex-shrink: 0;
+    }
+    .section-title .icon { font-size: 28px; }
+    /* ── CARD ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px 28px;
+    }
+    /* ── GRID ── */
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+    /* ── WHAT IS OPENCLAW ── */
+    .intro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+    @media(max-width:700px){ .intro-grid{ grid-template-columns: 1fr; } }
+    .intro-text { font-size: 15px; color: var(--muted); line-height: 1.9; }
+    .intro-text strong { color: var(--text); }
+    .compare-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 8px; }
+    .compare-table th, .compare-table td {
+      padding: 10px 14px; text-align: left;
+      border: 1px solid var(--border);
+    }
+    .compare-table th { background: rgba(255,255,255,0.05); font-weight: 600; }
+    .compare-table tr:hover td { background: rgba(255,255,255,0.03); }
+    .tag-yes { color: #6bcb77; }
+    .tag-no { color: #ff6b6b; }
+    /* ── ARCHITECTURE DIAGRAM ── */
+    .arch-diagram {
+      background: #0a0e1a;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      overflow-x: auto;
+    }
+    .arch-layers { display: flex; flex-direction: column; gap: 12px; }
+    .arch-layer {
+      border-radius: 12px;
+      padding: 16px 20px;
+      display: flex; align-items: center; gap: 16px;
+      position: relative;
+    }
+    .arch-layer .layer-icon { font-size: 28px; flex-shrink: 0; }
+    .arch-layer .layer-info { flex: 1; }
+    .arch-layer .layer-title { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
+    .arch-layer .layer-desc { font-size: 13px; opacity: 0.75; }
+    .arch-layer .layer-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .arch-tag {
+      font-size: 11px; padding: 2px 8px; border-radius: 10px;
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+    }
+    .layer-1 { background: linear-gradient(90deg, rgba(233,76,61,0.2), rgba(233,76,61,0.05)); border-left: 4px solid #e94c3d; }
+    .layer-2 { background: linear-gradient(90deg, rgba(243,156,18,0.2), rgba(243,156,18,0.05)); border-left: 4px solid #f39c12; }
+    .layer-3 { background: linear-gradient(90deg, rgba(41,128,185,0.2), rgba(41,128,185,0.05)); border-left: 4px solid #2980b9; }
+    .layer-4 { background: linear-gradient(90deg, rgba(22,160,133,0.2), rgba(22,160,133,0.05)); border-left: 4px solid #16a085; }
+    .layer-5 { background: linear-gradient(90deg, rgba(142,68,173,0.2), rgba(142,68,173,0.05)); border-left: 4px solid #8e44ad; }
+    .layer-6 { background: linear-gradient(90deg, rgba(46,204,113,0.2), rgba(46,204,113,0.05)); border-left: 4px solid #2ecc71; }
+    .arch-arrow {
+      text-align: center; font-size: 20px; color: var(--muted); margin: -4px 0;
+    }
+    /* ── FLOW DIAGRAM ── */
+    .flow-container { overflow-x: auto; }
+    .flow { display: flex; align-items: center; gap: 0; min-width: 700px; }
+    .flow-step {
+      flex: 1; text-align: center; padding: 16px 12px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; font-size: 13px;
+      position: relative;
+    }
+    .flow-step .step-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 24px; height: 24px; border-radius: 50%;
+      background: var(--red); font-size: 11px; font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .flow-step .step-icon { font-size: 20px; display: block; margin-bottom: 4px; }
+    .flow-step .step-name { font-weight: 600; font-size: 12px; margin-bottom: 4px; }
+    .flow-step .step-desc { font-size: 11px; color: var(--muted); }
+    .flow-arrow {
+      font-size: 22px; color: var(--accent); flex-shrink: 0;
+      padding: 0 4px;
+    }
+    /* ── AGENT LOOP ── */
+    .loop-container { position: relative; }
+    .loop-ring {
+      width: 580px; height: 580px; margin: 0 auto;
+      position: relative;
+    }
+    @media(max-width:640px){ .loop-ring{ width: 320px; height: 320px; } }
+    .loop-center {
+      position: absolute;
+      top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 140px; height: 140px;
+      background: radial-gradient(circle, rgba(233,76,61,0.3), rgba(233,76,61,0.05));
+      border: 2px solid rgba(233,76,61,0.5);
+      border-radius: 50%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center;
+      z-index: 2;
+    }
+    @media(max-width:640px){ .loop-center{ width: 80px; height: 80px; } }
+    .loop-center .lc-icon { font-size: 36px; }
+    @media(max-width:640px){ .loop-center .lc-icon{ font-size: 22px; } }
+    .loop-center .lc-text { font-size: 13px; font-weight: 700; color: #ff9090; margin-top: 4px; }
+    @media(max-width:640px){ .loop-center .lc-text{ font-size: 9px; } }
+    .loop-node {
+      position: absolute;
+      width: 100px; height: 80px;
+      border-radius: 10px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center;
+      font-size: 12px; font-weight: 600;
+      border: 1px solid;
+      padding: 8px;
+      z-index: 2;
+    }
+    @media(max-width:640px){ .loop-node{ width: 56px; height: 52px; font-size: 8px; padding:4px; border-radius:6px; } }
+    .loop-node .ln-icon { font-size: 18px; margin-bottom: 4px; }
+    @media(max-width:640px){ .loop-node .ln-icon{ font-size: 12px; margin-bottom:2px; } }
+    .ln-1 { background: rgba(233,76,61,0.15); border-color: rgba(233,76,61,0.5); color: #ff8080; }
+    .ln-2 { background: rgba(243,156,18,0.15); border-color: rgba(243,156,18,0.5); color: #ffc966; }
+    .ln-3 { background: rgba(41,128,185,0.15); border-color: rgba(41,128,185,0.5); color: #6bb3e3; }
+    .ln-4 { background: rgba(22,160,133,0.15); border-color: rgba(22,160,133,0.5); color: #7ecdc4; }
+    .ln-5 { background: rgba(142,68,173,0.15); border-color: rgba(142,68,173,0.5); color: #c39bd3; }
+    .ln-6 { background: rgba(46,204,113,0.15); border-color: rgba(46,204,113,0.5); color: #7dddaa; }
+    .ln-7 { background: rgba(230,126,34,0.15); border-color: rgba(230,126,34,0.5); color: #f5ab60; }
+    .ln-8 { background: rgba(52,152,219,0.15); border-color: rgba(52,152,219,0.5); color: #7fb9e0; }
+    /* ── MEMORY ── */
+    .memory-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; }
+    @media(max-width:700px){ .memory-grid{ grid-template-columns: 1fr; } }
+    .mem-card {
+      border-radius: 12px; padding: 20px;
+      border: 1px solid var(--border);
+      position: relative; overflow: hidden;
+    }
+    .mem-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    }
+    .mem-1 { background: rgba(233,76,61,0.08); }
+    .mem-1::before { background: #e94c3d; }
+    .mem-2 { background: rgba(41,128,185,0.08); }
+    .mem-2::before { background: #2980b9; }
+    .mem-3 { background: rgba(22,160,133,0.08); }
+    .mem-3::before { background: #16a085; }
+    .mem-icon { font-size: 32px; margin-bottom: 10px; }
+    .mem-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+    .mem-desc { font-size: 13px; color: var(--muted); }
+    .mem-tag { display: inline-block; margin-top: 10px; font-size: 11px; padding: 3px 10px; border-radius: 8px; background: rgba(255,255,255,0.08); }
+    /* ── SKILLS ── */
+    .skill-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 18px;
+    }
+    .skill-card .sk-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .skill-card .sk-icon { font-size: 24px; }
+    .skill-card .sk-name { font-weight: 700; font-size: 15px; }
+    .skill-card .sk-desc { font-size: 13px; color: var(--muted); }
+    .sk-file {
+      margin-top: 10px; padding: 8px 12px;
+      background: rgba(0,0,0,0.3); border-radius: 6px;
+      font-family: monospace; font-size: 12px; color: #7dd3fc;
+    }
+    /* ── CHANNELS ── */
+    .channel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 14px; }
+    .ch-item {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px 12px;
+      text-align: center; font-size: 13px; font-weight: 600;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .ch-item:hover { transform: translateY(-3px); border-color: var(--accent); }
+    .ch-item .ch-icon { font-size: 30px; display: block; margin-bottom: 8px; }
+    /* ── HEARTBEAT ── */
+    .hb-timeline { display: flex; flex-direction: column; gap: 16px; }
+    .hb-item {
+      display: flex; gap: 16px; align-items: flex-start;
+    }
+    .hb-dot {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--red); flex-shrink: 0; margin-top: 5px;
+      box-shadow: 0 0 8px rgba(233,76,61,0.5);
+    }
+    .hb-dot.blue { background: #2980b9; box-shadow: 0 0 8px rgba(41,128,185,0.5); }
+    .hb-dot.green { background: #2ecc71; box-shadow: 0 0 8px rgba(46,204,113,0.5); }
+    .hb-dot.purple { background: #8e44ad; box-shadow: 0 0 8px rgba(142,68,173,0.5); }
+    .hb-content { flex: 1; }
+    .hb-title { font-weight: 700; margin-bottom: 4px; }
+    .hb-desc { font-size: 13px; color: var(--muted); }
+    .hb-line { width: 2px; height: 16px; background: var(--border); margin-left: 6px; }
+    /* ── CODE BLOCK ── */
+    .code-block {
+      background: #0d1117; border: 1px solid var(--border);
+      border-radius: 10px; padding: 20px; margin: 16px 0;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 13px; line-height: 1.8; overflow-x: auto;
+    }
+    .code-block .kw { color: #ff79c6; }
+    .code-block .str { color: #f1fa8c; }
+    .code-block .cmt { color: #6272a4; font-style: italic; }
+    .code-block .fn { color: #50fa7b; }
+    .code-block .prop { color: #8be9fd; }
+    /* ── CALLOUT ── */
+    .callout {
+      border-radius: 10px; padding: 16px 20px;
+      display: flex; gap: 14px; align-items: flex-start;
+      margin: 20px 0;
+    }
+    .callout.info { background: rgba(41,128,185,0.1); border-left: 4px solid #2980b9; }
+    .callout.warn { background: rgba(243,156,18,0.1); border-left: 4px solid #f39c12; }
+    .callout.tip { background: rgba(22,160,133,0.1); border-left: 4px solid #16a085; }
+    .callout .ci-icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
+    .callout .ci-text { font-size: 14px; }
+    .callout .ci-text strong { color: var(--text); }
+    /* ── SECURITY ── */
+    .sec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+    .sec-item {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px;
+    }
+    .sec-item .si-icon { font-size: 24px; margin-bottom: 8px; }
+    .sec-item .si-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+    .sec-item .si-desc { font-size: 12px; color: var(--muted); }
+    /* ── COMPARISON ── */
+    .vs-row { display: flex; gap: 20px; }
+    @media(max-width:600px){ .vs-row{ flex-direction: column; } }
+    .vs-col { flex: 1; }
+    .vs-title { font-weight: 700; font-size: 16px; margin-bottom: 12px; text-align: center; padding: 8px; border-radius: 8px; }
+    .vs-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .vs-list li { font-size: 13px; display: flex; gap: 8px; align-items: flex-start; }
+    /* ── FOOTER ── */
+    footer {
+      text-align: center; padding: 40px 24px;
+      border-top: 1px solid var(--border);
+      font-size: 13px; color: var(--muted);
+    }
+    /* ── HIGHLIGHT BOX ── */
+    .highlight-box {
+      background: linear-gradient(135deg, rgba(233,76,61,0.1), rgba(142,68,173,0.1));
+      border: 1px solid rgba(233,76,61,0.3);
+      border-radius: 12px; padding: 20px 24px; margin: 16px 0;
+    }
+    .highlight-box .hb-label { font-size: 12px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .highlight-box .hb-content-text { font-size: 15px; }
+    /* ── TOC ── */
+    .toc {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px; margin-bottom: 40px;
+    }
+    .toc h3 { font-size: 16px; margin-bottom: 14px; color: var(--muted); }
+    .toc ol { padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+    .toc a { color: var(--text); text-decoration: none; font-size: 14px; }
+    .toc a:hover { color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <span class="hero-emoji">🦞</span>
+  <h1>OpenClaw 底层逻辑原理</h1>
+  <p>从消息入口到执行出口 — 一份图文并茂的技术全解析</p>
+  <span class="badge">2026 最新版 · 深度技术文档</span>
+</div>
+
+<div class="container">
+
+  <!-- TOC -->
+  <section>
+    <div class="toc">
+      <h3>📋 目录</h3>
+      <ol>
+        <li><a href="#what">① 什么是 OpenClaw</a></li>
+        <li><a href="#arch">② 整体架构：六层设计</a></li>
+        <li><a href="#flow">③ 消息完整流转链路</a></li>
+        <li><a href="#loop">④ Agent Loop 推理引擎</a></li>
+        <li><a href="#memory">⑤ 三级记忆系统</a></li>
+        <li><a href="#skills">⑥ Skills 技能体系</a></li>
+        <li><a href="#channels">⑦ 多渠道接入机制</a></li>
+        <li><a href="#heartbeat">⑧ Heartbeat 心跳与自主运行</a></li>
+        <li><a href="#security">⑨ 安全与隐私模型</a></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ① WHAT IS OPENCLAW -->
+  <section id="what">
+    <div class="section-title">
+      <div class="num">1</div>
+      <span class="icon">🦞</span>
+      <span>什么是 OpenClaw</span>
+    </div>
+
+    <div class="intro-grid">
+      <div>
+        <p class="intro-text">
+          OpenClaw 是一款开源的<strong>本地化 AI 智能体网关（Self-hosted AI Agent Gateway）</strong>。
+          它的核心理念是：<strong>将大型语言模型（LLM）从「对话工具」升级为「执行引擎」</strong>——
+          真正能替你操作文件、控制浏览器、发送邮件、写代码、管理日历的私人 AI 助手。
+        </p>
+        <br />
+        <p class="intro-text">
+          你通过日常使用的即时通讯工具（WhatsApp、Telegram、Discord 等）发出指令，
+          OpenClaw 运行在你自己的设备上，调用本地工具完成任务，再把结果回传给你。
+          <strong>数据不出本机，全程私密。</strong>
+        </p>
+        <div class="callout info" style="margin-top:16px">
+          <span class="ci-icon">💡</span>
+          <div class="ci-text"><strong>一句话定义：</strong>OpenClaw = 本地 AI 大脑 + 多渠道消息网关 + 工具执行引擎，是一个住在你电脑里的 24/7 数字员工。</div>
+        </div>
+      </div>
+
+      <div>
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>能力对比</th>
+              <th>普通聊天AI</th>
+              <th>OpenClaw</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>对话回答</td><td class="tag-yes">✓</td><td class="tag-yes">✓</td></tr>
+            <tr><td>操作本地文件</td><td class="tag-no">✗</td><td class="tag-yes">✓</td></tr>
+            <tr><td>控制浏览器</td><td class="tag-no">✗</td><td class="tag-yes">✓</td></tr>
+            <tr><td>执行代码</td><td class="tag-no">✗</td><td class="tag-yes">✓</td></tr>
+            <tr><td>多渠道接入</td><td class="tag-no">✗</td><td class="tag-yes">✓</td></tr>
+            <tr><td>持久化记忆</td><td class="tag-no">✗</td><td class="tag-yes">✓</td></tr>
+            <tr><td>自主定时任务</td><td class="tag-no">✗</td><td class="tag-yes">✓</td></tr>
+            <tr><td>数据本地私有</td><td class="tag-no">✗</td><td class="tag-yes">✓</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ② ARCHITECTURE -->
+  <section id="arch">
+    <div class="section-title">
+      <div class="num">2</div>
+      <span class="icon">🏗️</span>
+      <span>整体架构：六层设计</span>
+    </div>
+
+    <div class="arch-diagram">
+      <div style="text-align:center; margin-bottom:24px; font-size:14px; color:var(--muted);">
+        ↓ 消息从顶层进入，逐层处理，向下执行，结果逐层返回 ↑
+      </div>
+      <div class="arch-layers">
+
+        <div class="arch-layer layer-1">
+          <span class="layer-icon">📲</span>
+          <div class="layer-info">
+            <div class="layer-title">Layer 1 — Channel Adapters（渠道适配层）</div>
+            <div class="layer-desc">统一接收来自各平台的消息，屏蔽平台差异，转换为内部标准消息格式（Envelope）</div>
+            <div class="layer-tags">
+              <span class="arch-tag">WhatsApp</span>
+              <span class="arch-tag">Telegram</span>
+              <span class="arch-tag">Discord</span>
+              <span class="arch-tag">Slack</span>
+              <span class="arch-tag">iMessage</span>
+              <span class="arch-tag">Signal</span>
+              <span class="arch-tag">飞书/钉钉</span>
+            </div>
+          </div>
+        </div>
+        <div class="arch-arrow">⬇</div>
+
+        <div class="arch-layer layer-2">
+          <span class="layer-icon">🌐</span>
+          <div class="layer-info">
+            <div class="layer-title">Layer 2 — Gateway 网关（消息路由与会话管理）</div>
+            <div class="layer-desc">Node.js 守护进程，负责维护提供商连接、验证帧格式、管理 Session 会话，根据 JSON Schema 路由消息到对应 Agent</div>
+            <div class="layer-tags">
+              <span class="arch-tag">Session 管理</span>
+              <span class="arch-tag">RPC 调度</span>
+              <span class="arch-tag">WS API</span>
+              <span class="arch-tag">消息鉴权</span>
+              <span class="arch-tag">事件发射</span>
+            </div>
+          </div>
+        </div>
+        <div class="arch-arrow">⬇</div>
+
+        <div class="arch-layer layer-3">
+          <span class="layer-icon">🧠</span>
+          <div class="layer-info">
+            <div class="layer-title">Layer 3 — Agent Runtime（代理运行时 / 推理核心）</div>
+            <div class="layer-desc">OpenClaw 的核心大脑，执行 Agent Loop 推理循环，管理上下文窗口，向 LLM 发送请求并解析工具调用指令</div>
+            <div class="layer-tags">
+              <span class="arch-tag">Agent Loop</span>
+              <span class="arch-tag">Context 管理</span>
+              <span class="arch-tag">Tool Parsing</span>
+              <span class="arch-tag">Compaction</span>
+            </div>
+          </div>
+        </div>
+        <div class="arch-arrow">⬇</div>
+
+        <div class="arch-layer layer-4">
+          <span class="layer-icon">🔧</span>
+          <div class="layer-info">
+            <div class="layer-title">Layer 4 — Skills / Tool Executor（技能执行层）</div>
+            <div class="layer-desc">执行 LLM 请求的具体工具调用：文件操作、浏览器控制、代码执行、API 请求等。Skills 文件夹定义每个工具的能力边界</div>
+            <div class="layer-tags">
+              <span class="arch-tag">文件系统</span>
+              <span class="arch-tag">浏览器控制</span>
+              <span class="arch-tag">Shell 执行</span>
+              <span class="arch-tag">HTTP 请求</span>
+              <span class="arch-tag">自定义 Skills</span>
+            </div>
+          </div>
+        </div>
+        <div class="arch-arrow">⬇</div>
+
+        <div class="arch-layer layer-5">
+          <span class="layer-icon">💾</span>
+          <div class="layer-info">
+            <div class="layer-title">Layer 5 — Memory System（记忆持久化层）</div>
+            <div class="layer-desc">三级记忆体系：短期上下文（对话历史）、中期 Markdown 文件（AGENTS.md / SKILL.md）、长期 SQLite 数据库（向量嵌入 + KV 存储）</div>
+            <div class="layer-tags">
+              <span class="arch-tag">SQLite</span>
+              <span class="arch-tag">Markdown Files</span>
+              <span class="arch-tag">Vector Embedding</span>
+              <span class="arch-tag">KV Store</span>
+            </div>
+          </div>
+        </div>
+        <div class="arch-arrow">⬇</div>
+
+        <div class="arch-layer layer-6">
+          <span class="layer-icon">🤖</span>
+          <div class="layer-info">
+            <div class="layer-title">Layer 6 — LLM Provider Interface（模型接口层）</div>
+            <div class="layer-desc">统一的大模型调用抽象层，支持 Claude、GPT、Gemini、本地 Ollama 等，返回推理结果给 Agent Runtime</div>
+            <div class="layer-tags">
+              <span class="arch-tag">Claude</span>
+              <span class="arch-tag">GPT-4o</span>
+              <span class="arch-tag">Gemini</span>
+              <span class="arch-tag">Ollama（本地）</span>
+              <span class="arch-tag">自定义端点</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ③ MESSAGE FLOW -->
+  <section id="flow">
+    <div class="section-title">
+      <div class="num">3</div>
+      <span class="icon">🔄</span>
+      <span>消息完整流转链路</span>
+    </div>
+
+    <div class="callout tip">
+      <span class="ci-icon">📌</span>
+      <div class="ci-text">一条用户消息从发送到最终执行，要经历以下 7 个核心阶段。</div>
+    </div>
+
+    <div class="flow-container" style="margin-top:24px">
+      <div class="flow">
+        <div class="flow-step">
+          <div class="step-num">1</div>
+          <span class="step-icon">📲</span>
+          <div class="step-name">用户发消息</div>
+          <div class="step-desc">WhatsApp / Telegram 等发出指令</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">2</div>
+          <span class="step-icon">🔌</span>
+          <div class="step-name">Channel 接收</div>
+          <div class="step-desc">适配器将消息封装成标准 Envelope</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">3</div>
+          <span class="step-icon">🌐</span>
+          <div class="step-name">Gateway 路由</div>
+          <div class="step-desc">验证鉴权 → 查找/创建 Session → 路由</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">4</div>
+          <span class="step-icon">🧠</span>
+          <div class="step-name">Agent Loop</div>
+          <div class="step-desc">加载 Context → 调用 LLM → 解析 Tool Call</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">5</div>
+          <span class="step-icon">🔧</span>
+          <div class="step-name">工具执行</div>
+          <div class="step-desc">执行文件/代码/浏览器等具体操作</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">6</div>
+          <span class="step-icon">💾</span>
+          <div class="step-name">结果写入记忆</div>
+          <div class="step-desc">更新 SQLite / 文件记忆</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="step-num">7</div>
+          <span class="step-icon">📤</span>
+          <div class="step-name">响应回传</div>
+          <div class="step-desc">结果通过原渠道回传给用户</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:24px">
+      <h3 style="margin-bottom:16px; font-size:15px;">🔍 Gateway 内部处理细节</h3>
+      <div class="grid-2">
+        <div>
+          <p style="font-size:13px; color:var(--muted); margin-bottom:8px;"><strong style="color:var(--text)">入站处理（Ingress）</strong></p>
+          <ul style="font-size:13px; color:var(--muted); padding-left:16px; line-height:2;">
+            <li>WebSocket 帧接收与 JSON Schema 校验</li>
+            <li>Provider 身份认证与速率限制</li>
+            <li>消息去重与幂等性保证</li>
+            <li>Session 查找或懒加载创建</li>
+          </ul>
+        </div>
+        <div>
+          <p style="font-size:13px; color:var(--muted); margin-bottom:8px;"><strong style="color:var(--text)">出站处理（Egress）</strong></p>
+          <ul style="font-size:13px; color:var(--muted); padding-left:16px; line-height:2;">
+            <li>Agent 响应序列化为渠道格式</li>
+            <li>重试与指数退避</li>
+            <li>媒体文件上传处理</li>
+            <li>消息分片（超长内容自动切割）</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ④ AGENT LOOP -->
+  <section id="loop">
+    <div class="section-title">
+      <div class="num">4</div>
+      <span class="icon">♾️</span>
+      <span>Agent Loop 推理引擎</span>
+    </div>
+
+    <p style="color:var(--muted); margin-bottom:24px; font-size:14px;">
+      Agent Loop 是 OpenClaw 最核心的运行机制。每次收到用户消息，Agent 会进入一个 <strong style="color:var(--text)">持续循环</strong>，直到任务完成或 LLM 判断无需更多工具调用为止。
+    </p>
+
+    <!-- 环形图 -->
+    <div class="loop-container" style="margin: 32px 0;">
+      <div class="loop-ring">
+        <!-- Center -->
+        <div class="loop-center">
+          <span class="lc-icon">♾️</span>
+          <span class="lc-text">Agent<br>Loop</span>
+        </div>
+
+        <!-- 8 nodes positioned around the ring -->
+        <!-- Top: step 1 -->
+        <div class="loop-node ln-1" style="top:0; left:50%; transform:translateX(-50%);">
+          <span class="ln-icon">📥</span>
+          <div>①接收消息</div>
+        </div>
+        <!-- Top-right: step 2 -->
+        <div class="loop-node ln-2" style="top:11%; right:3%;">
+          <span class="ln-icon">📚</span>
+          <div>②加载记忆</div>
+        </div>
+        <!-- Right: step 3 -->
+        <div class="loop-node ln-3" style="top:50%; right:-2%; transform:translateY(-50%);">
+          <span class="ln-icon">🧠</span>
+          <div>③LLM推理</div>
+        </div>
+        <!-- Bottom-right: step 4 -->
+        <div class="loop-node ln-4" style="bottom:11%; right:3%;">
+          <span class="ln-icon">🔍</span>
+          <div>④解析Tool</div>
+        </div>
+        <!-- Bottom: step 5 -->
+        <div class="loop-node ln-5" style="bottom:0; left:50%; transform:translateX(-50%);">
+          <span class="ln-icon">⚙️</span>
+          <div>⑤执行工具</div>
+        </div>
+        <!-- Bottom-left: step 6 -->
+        <div class="loop-node ln-6" style="bottom:11%; left:3%;">
+          <span class="ln-icon">💾</span>
+          <div>⑥写入结果</div>
+        </div>
+        <!-- Left: step 7 -->
+        <div class="loop-node ln-7" style="top:50%; left:-2%; transform:translateY(-50%);">
+          <span class="ln-icon">🔁</span>
+          <div>⑦判断继续</div>
+        </div>
+        <!-- Top-left: step 8 -->
+        <div class="loop-node ln-8" style="top:11%; left:3%;">
+          <span class="ln-icon">📤</span>
+          <div>⑧回传响应</div>
+        </div>
+
+        <!-- Ring line (SVG) -->
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 580 580">
+          <circle cx="290" cy="290" r="200" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="1" stroke-dasharray="8 4"/>
+          <!-- Arrowhead markers -->
+          <defs>
+            <marker id="arr" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L6,3 z" fill="rgba(233,76,61,0.6)"/>
+            </marker>
+          </defs>
+          <!-- Curved arrows between nodes -->
+          <path d="M290,90 A200,200 0 0,1 466,164" fill="none" stroke="rgba(233,76,61,0.4)" stroke-width="1.5" marker-end="url(#arr)"/>
+          <path d="M466,164 A200,200 0 0,1 490,290" fill="none" stroke="rgba(243,156,18,0.4)" stroke-width="1.5" marker-end="url(#arr)"/>
+          <path d="M490,290 A200,200 0 0,1 466,416" fill="none" stroke="rgba(41,128,185,0.4)" stroke-width="1.5" marker-end="url(#arr)"/>
+          <path d="M466,416 A200,200 0 0,1 290,490" fill="none" stroke="rgba(22,160,133,0.4)" stroke-width="1.5" marker-end="url(#arr)"/>
+          <path d="M290,490 A200,200 0 0,1 114,416" fill="none" stroke="rgba(142,68,173,0.4)" stroke-width="1.5" marker-end="url(#arr)"/>
+          <path d="M114,416 A200,200 0 0,1 90,290" fill="none" stroke="rgba(46,204,113,0.4)" stroke-width="1.5" marker-end="url(#arr)"/>
+          <path d="M90,290 A200,200 0 0,1 114,164" fill="none" stroke="rgba(230,126,34,0.4)" stroke-width="1.5" marker-end="url(#arr)"/>
+          <path d="M114,164 A200,200 0 0,1 290,90" fill="none" stroke="rgba(52,152,219,0.4)" stroke-width="1.5" marker-end="url(#arr)"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Step details -->
+    <div class="grid-2" style="margin-top:8px">
+      <div class="card" style="border-left: 3px solid #ff8080;">
+        <h4 style="color:#ff8080; margin-bottom:8px;">① 接收消息</h4>
+        <p style="font-size:13px; color:var(--muted);">Gateway 将标准化 Envelope 推入 Agent 队列，包含：发送者 ID、渠道标识、原始文本/媒体</p>
+      </div>
+      <div class="card" style="border-left: 3px solid #ffc966;">
+        <h4 style="color:#ffc966; margin-bottom:8px;">② 加载记忆 & 构建 Context</h4>
+        <p style="font-size:13px; color:var(--muted);">从 SQLite + Markdown 文件中检索相关记忆，拼接系统 Prompt（AGENTS.md）、历史对话、工具描述，构造最终输入</p>
+      </div>
+      <div class="card" style="border-left: 3px solid #6bb3e3;">
+        <h4 style="color:#6bb3e3; margin-bottom:8px;">③ LLM 推理</h4>
+        <p style="font-size:13px; color:var(--muted);">将构建好的 Context 发送给 LLM（Claude/GPT/Gemini 等），LLM 返回文本响应或 Tool Call 指令</p>
+      </div>
+      <div class="card" style="border-left: 3px solid #7ecdc4;">
+        <h4 style="color:#7ecdc4; margin-bottom:8px;">④ 解析 Tool Call</h4>
+        <p style="font-size:13px; color:var(--muted);">解析 LLM 返回的 JSON 结构，提取函数名 + 参数；若无 Tool Call，则进入 ⑧ 直接回传</p>
+      </div>
+      <div class="card" style="border-left: 3px solid #c39bd3;">
+        <h4 style="color:#c39bd3; margin-bottom:8px;">⑤ 执行工具</h4>
+        <p style="font-size:13px; color:var(--muted);">调用对应 Skill 的实现：读写文件、执行 Shell、打开浏览器、发 HTTP 请求、操作数据库…</p>
+      </div>
+      <div class="card" style="border-left: 3px solid #7dddaa;">
+        <h4 style="color:#7dddaa; margin-bottom:8px;">⑥ 写入结果 & 更新记忆</h4>
+        <p style="font-size:13px; color:var(--muted);">将工具执行结果追加到上下文，并根据重要性决定是否持久化到 SQLite 记忆库</p>
+      </div>
+      <div class="card" style="border-left: 3px solid #f5ab60;">
+        <h4 style="color:#f5ab60; margin-bottom:8px;">⑦ 判断是否继续循环</h4>
+        <p style="font-size:13px; color:var(--muted);">若 LLM 仍有未完成的 Tool Call 或判断任务未完成，则回到 ③ 继续推理（最多迭代 N 轮）</p>
+      </div>
+      <div class="card" style="border-left: 3px solid #7fb9e0;">
+        <h4 style="color:#7fb9e0; margin-bottom:8px;">⑧ 回传最终响应</h4>
+        <p style="font-size:13px; color:var(--muted);">循环结束后，将最终文本结果通过 Gateway 发回原始渠道，用户收到完整答复</p>
+      </div>
+    </div>
+
+    <div class="callout warn" style="margin-top:20px">
+      <span class="ci-icon">⚠️</span>
+      <div class="ci-text"><strong>Context Compaction（上下文压缩）：</strong>当对话历史超出 LLM Token 限制时，OpenClaw 会自动执行压缩策略——将旧对话摘要化并存入记忆，腾出 Token 窗口空间，是防止"失忆"的关键机制。</div>
+    </div>
+  </section>
+
+  <!-- ⑤ MEMORY -->
+  <section id="memory">
+    <div class="section-title">
+      <div class="num">5</div>
+      <span class="icon">💾</span>
+      <span>三级记忆系统</span>
+    </div>
+
+    <p style="color:var(--muted); margin-bottom:24px; font-size:14px;">OpenClaw 拥有类似人脑的三级记忆体系，让 AI Agent 在跨会话、跨任务时保持「记性」。</p>
+
+    <div class="memory-grid">
+      <div class="mem-card mem-1">
+        <div class="mem-icon">🔴</div>
+        <div class="mem-title">短期记忆（In-Context）</div>
+        <div class="mem-desc">
+          当前会话的完整对话历史，直接存在 LLM 的 Token 上下文窗口中。
+          速度最快，但容量有限（受 Token Limit 约束），会话结束后不主动持久化。
+        </div>
+        <span class="mem-tag">⚡ 实时 · 高速读写</span>
+      </div>
+      <div class="mem-card mem-2">
+        <div class="mem-icon">🔵</div>
+        <div class="mem-title">中期记忆（Markdown Files）</div>
+        <div class="mem-desc">
+          以 Markdown 文件存储的结构化知识，包括：
+          <br>· <code>AGENTS.md</code> — Agent 行为规范 & 系统提示词
+          <br>· <code>SKILL.md</code> — 每个技能的使用说明
+          <br>· 自定义知识文档
+          可被 Agent 实时读取，支持热更新。
+        </div>
+        <span class="mem-tag">📄 人类可读 · 热更新</span>
+      </div>
+      <div class="mem-card mem-3">
+        <div class="mem-icon">🟢</div>
+        <div class="mem-title">长期记忆（SQLite + Vector DB）</div>
+        <div class="mem-desc">
+          存储在本地 SQLite 数据库中，包含：
+          <br>· 向量嵌入（Embedding）— 支持语义相似度检索
+          <br>· KV 键值对 — 用户偏好、长期事实记忆
+          <br>· 历史任务摘要
+          跨会话持久保留，智能检索相关记忆注入上下文。
+        </div>
+        <span class="mem-tag">🗄️ 永久保留 · 语义检索</span>
+      </div>
+    </div>
+
+    <!-- 记忆流转示意 -->
+    <div class="card" style="margin-top:24px">
+      <h3 style="margin-bottom:16px; font-size:15px;">🔁 记忆读写流程</h3>
+      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; font-size:13px;">
+        <div style="padding:10px 16px; background:rgba(233,76,61,0.15); border:1px solid rgba(233,76,61,0.3); border-radius:8px;">
+          用户说话
+        </div>
+        <span style="color:var(--accent)">→</span>
+        <div style="padding:10px 16px; background:rgba(41,128,185,0.15); border:1px solid rgba(41,128,185,0.3); border-radius:8px;">
+          语义检索长期记忆<br><small style="color:var(--muted)">相关的历史偏好/事实</small>
+        </div>
+        <span style="color:var(--accent)">→</span>
+        <div style="padding:10px 16px; background:rgba(22,160,133,0.15); border:1px solid rgba(22,160,133,0.3); border-radius:8px;">
+          合并到上下文<br><small style="color:var(--muted)">注入 System Prompt</small>
+        </div>
+        <span style="color:var(--accent)">→</span>
+        <div style="padding:10px 16px; background:rgba(142,68,173,0.15); border:1px solid rgba(142,68,173,0.3); border-radius:8px;">
+          LLM 带上记忆推理
+        </div>
+        <span style="color:var(--accent)">→</span>
+        <div style="padding:10px 16px; background:rgba(243,156,18,0.15); border:1px solid rgba(243,156,18,0.3); border-radius:8px;">
+          新事实写回记忆库<br><small style="color:var(--muted)">SQLite + Embedding</small>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ⑥ SKILLS -->
+  <section id="skills">
+    <div class="section-title">
+      <div class="num">6</div>
+      <span class="icon">🔧</span>
+      <span>Skills 技能体系</span>
+    </div>
+
+    <p style="color:var(--muted); margin-bottom:24px; font-size:14px;">
+      Skills 是 OpenClaw 的「工具箱」，每个 Skill 是一个独立目录，包含一个 <code style="color:#7dd3fc;">SKILL.md</code> 文件（YAML 元信息 + 使用说明），告诉 Agent 这个工具能做什么、如何调用。
+    </p>
+
+    <div class="callout info">
+      <span class="ci-icon">📂</span>
+      <div class="ci-text"><strong>Skills 目录结构：</strong>每个 Skill = 一个文件夹 + SKILL.md + 可选的脚本/参考文档。OpenClaw 启动时自动扫描并热加载所有 Skills，SKILL.md 变动时实时更新。</div>
+    </div>
+
+    <div class="code-block" style="margin:24px 0">
+<span class="cmt"># SKILL.md 示例结构</span>
+<span class="prop">---</span>
+<span class="prop">name</span>: <span class="str">"browser-control"</span>
+<span class="prop">description</span>: <span class="str">"控制浏览器访问网页、截图、填写表单"</span>
+<span class="prop">tools</span>:
+  - <span class="str">"browser_open"</span>
+  - <span class="str">"browser_click"</span>
+  - <span class="str">"browser_screenshot"</span>
+<span class="prop">version</span>: <span class="str">"1.2.0"</span>
+<span class="prop">---</span>
+
+<span class="cmt">## 使用说明</span>
+<span class="fn">浏览器控制技能允许 Agent 打开网页、点击元素、截图...</span>
+<span class="cmt">## 示例</span>
+<span class="fn">打开 https://example.com 并截图主页...</span>
+    </div>
+
+    <div class="grid-3" style="margin-top:16px">
+      <div class="skill-card">
+        <div class="sk-head">
+          <span class="sk-icon">📁</span>
+          <span class="sk-name">文件系统 Skill</span>
+        </div>
+        <p class="sk-desc">读写文件、目录操作、文件搜索、内容提取</p>
+        <div class="sk-file">file-system/SKILL.md</div>
+      </div>
+      <div class="skill-card">
+        <div class="sk-head">
+          <span class="sk-icon">🌐</span>
+          <span class="sk-name">浏览器 Skill</span>
+        </div>
+        <p class="sk-desc">Playwright 驱动，自动化网页操作与数据抓取</p>
+        <div class="sk-file">browser/SKILL.md</div>
+      </div>
+      <div class="skill-card">
+        <div class="sk-head">
+          <span class="sk-icon">💻</span>
+          <span class="sk-name">代码执行 Skill</span>
+        </div>
+        <p class="sk-desc">在沙箱中运行 Python/JS/Shell 代码，返回输出</p>
+        <div class="sk-file">code-exec/SKILL.md</div>
+      </div>
+      <div class="skill-card">
+        <div class="sk-head">
+          <span class="sk-icon">📧</span>
+          <span class="sk-name">邮件 Skill</span>
+        </div>
+        <p class="sk-desc">收发邮件、管理收件箱、自动回复</p>
+        <div class="sk-file">email/SKILL.md</div>
+      </div>
+      <div class="skill-card">
+        <div class="sk-head">
+          <span class="sk-icon">📅</span>
+          <span class="sk-name">日历 Skill</span>
+        </div>
+        <p class="sk-desc">创建/查询/修改日历事件，提醒管理</p>
+        <div class="sk-file">calendar/SKILL.md</div>
+      </div>
+      <div class="skill-card">
+        <div class="sk-head">
+          <span class="sk-icon">🔌</span>
+          <span class="sk-name">自定义 API Skill</span>
+        </div>
+        <p class="sk-desc">任意 HTTP API 调用，快速接入第三方服务</p>
+        <div class="sk-file">custom-api/SKILL.md</div>
+      </div>
+    </div>
+
+    <div class="highlight-box" style="margin-top:24px">
+      <div class="hb-label">🔑 设计思想</div>
+      <div class="hb-content-text">Skills 采用「文档即接口」设计——<strong>SKILL.md 既是人类文档，也是 LLM 的工具说明书</strong>。Agent 读取 SKILL.md 就知道工具的能力边界和调用方式，无需写复杂的函数签名绑定代码。</div>
+    </div>
+  </section>
+
+  <!-- ⑦ CHANNELS -->
+  <section id="channels">
+    <div class="section-title">
+      <div class="num">7</div>
+      <span class="icon">📲</span>
+      <span>多渠道接入机制</span>
+    </div>
+
+    <p style="color:var(--muted); margin-bottom:24px; font-size:14px;">
+      OpenClaw 的渠道适配层（Channel Adapter）屏蔽了各平台的协议差异，让同一个 Agent 可以同时服务于多个聊天渠道。
+    </p>
+
+    <div class="channel-grid">
+      <div class="ch-item"><span class="ch-icon">💬</span>WhatsApp</div>
+      <div class="ch-item"><span class="ch-icon">✈️</span>Telegram</div>
+      <div class="ch-item"><span class="ch-icon">🎮</span>Discord</div>
+      <div class="ch-item"><span class="ch-icon">💼</span>Slack</div>
+      <div class="ch-item"><span class="ch-icon">🍎</span>iMessage</div>
+      <div class="ch-item"><span class="ch-icon">🔒</span>Signal</div>
+      <div class="ch-item"><span class="ch-icon">🐦</span>飞书</div>
+      <div class="ch-item"><span class="ch-icon">📎</span>钉钉</div>
+    </div>
+
+    <div class="card" style="margin-top:24px">
+      <h3 style="margin-bottom:16px; font-size:15px;">🔌 适配器工作原理</h3>
+      <div class="grid-2">
+        <div>
+          <p style="font-size:13px; color:var(--muted); line-height:1.9;">
+            <strong style="color:var(--text)">标准化 Envelope（信封对象）</strong><br>
+            每个适配器将平台消息转换为统一的 Envelope 格式：
+          </p>
+          <div class="code-block" style="margin-top:12px; font-size:12px;">
+{
+  <span class="prop">"id"</span>: <span class="str">"msg_abc123"</span>,
+  <span class="prop">"channel"</span>: <span class="str">"whatsapp"</span>,
+  <span class="prop">"from"</span>: <span class="str">"+8613800138000"</span>,
+  <span class="prop">"text"</span>: <span class="str">"帮我查一下明天天气"</span>,
+  <span class="prop">"timestamp"</span>: <span class="str">1741996800</span>,
+  <span class="prop">"media"</span>: <span class="kw">null</span>
+}
+          </div>
+        </div>
+        <div>
+          <p style="font-size:13px; color:var(--muted); line-height:1.9; margin-bottom:12px;">
+            <strong style="color:var(--text)">多渠道并发处理</strong>
+          </p>
+          <ul style="font-size:13px; color:var(--muted); padding-left:16px; line-height:2.2;">
+            <li>每个渠道独立运行连接维护线程</li>
+            <li>Session 与渠道强绑定，互不干扰</li>
+            <li>同一用户不同渠道可共享长期记忆</li>
+            <li>Gateway 统一调度，支持水平扩展</li>
+            <li>渠道断线自动重连 + 消息补发</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ⑧ HEARTBEAT -->
+  <section id="heartbeat">
+    <div class="section-title">
+      <div class="num">8</div>
+      <span class="icon">💓</span>
+      <span>Heartbeat 心跳与自主运行</span>
+    </div>
+
+    <p style="color:var(--muted); margin-bottom:24px; font-size:14px;">
+      Heartbeat 是 OpenClaw 实现「24/7 自主运行」的关键机制，让 Agent 不再依赖用户触发，而是能主动执行周期性任务。
+    </p>
+
+    <div class="grid-2">
+      <div>
+        <div class="hb-timeline">
+          <div class="hb-item">
+            <div class="hb-dot"></div>
+            <div class="hb-content">
+              <div class="hb-title">Heartbeat（心跳保活）</div>
+              <div class="hb-desc">主会话的固定轮询机制，按配置间隔（如每60秒）触发一次 Agent 检查。执行轻量巡检：待办事项、未处理消息、系统状态等。</div>
+            </div>
+          </div>
+          <div class="hb-line"></div>
+          <div class="hb-item">
+            <div class="hb-dot blue"></div>
+            <div class="hb-content">
+              <div class="hb-title">Cron（定时任务）</div>
+              <div class="hb-desc">精确到分钟级的计划任务，基于 Cron 表达式配置。适用于：每天晨报、每周总结、定期备份、账单提醒等。</div>
+            </div>
+          </div>
+          <div class="hb-line"></div>
+          <div class="hb-item">
+            <div class="hb-dot green"></div>
+            <div class="hb-content">
+              <div class="hb-title">三问反思机制</div>
+              <div class="hb-desc">每次心跳，Agent 会自问三个问题：① 现在有什么需要处理？ ② 上次任务完成了吗？ ③ 有什么主动可以做的？确保 Agent 保持高效自主。</div>
+            </div>
+          </div>
+          <div class="hb-line"></div>
+          <div class="hb-item">
+            <div class="hb-dot purple"></div>
+            <div class="hb-content">
+              <div class="hb-title">分级心跳设计</div>
+              <div class="hb-desc">支持多级频率：高频心跳（关键任务监控）、低频心跳（日常巡检）、静默模式（夜间不打扰）。通过 HEARTBEAT.md 配置文件控制。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card" style="height:100%">
+          <h3 style="margin-bottom:16px; font-size:15px;">🌙 典型自主任务场景</h3>
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <div style="display:flex; gap:12px; align-items:flex-start; font-size:13px;">
+              <span style="font-size:20px;">🌅</span>
+              <div><strong>每日晨报</strong><br><span style="color:var(--muted)">每天8点自动汇总：天气、日程、邮件摘要，发到 WhatsApp</span></div>
+            </div>
+            <div style="display:flex; gap:12px; align-items:flex-start; font-size:13px;">
+              <span style="font-size:20px;">📈</span>
+              <div><strong>价格监控</strong><br><span style="color:var(--muted)">每小时检查目标商品/股票价格，达到阈值时发出提醒</span></div>
+            </div>
+            <div style="display:flex; gap:12px; align-items:flex-start; font-size:13px;">
+              <span style="font-size:20px;">💾</span>
+              <div><strong>自动备份</strong><br><span style="color:var(--muted)">每晚自动将重要文件夹打包上传到云存储</span></div>
+            </div>
+            <div style="display:flex; gap:12px; align-items:flex-start; font-size:13px;">
+              <span style="font-size:20px;">📰</span>
+              <div><strong>信息聚合</strong><br><span style="color:var(--muted)">按主题自动抓取RSS/网页内容，生成摘要推送</span></div>
+            </div>
+            <div style="display:flex; gap:12px; align-items:flex-start; font-size:13px;">
+              <span style="font-size:20px;">🔔</span>
+              <div><strong>截止日期提醒</strong><br><span style="color:var(--muted)">监控日历和待办，提前发出智能提醒</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="code-block" style="margin-top:20px">
+<span class="cmt"># HEARTBEAT.md 配置示例</span>
+<span class="prop">---</span>
+<span class="prop">heartbeat</span>:
+  <span class="prop">interval</span>: <span class="str">60</span>          <span class="cmt"># 每60秒心跳一次</span>
+  <span class="prop">silent_hours</span>: <span class="str">"23:00-07:00"</span>  <span class="cmt"># 夜间静默</span>
+  <span class="prop">tasks</span>:
+    - <span class="prop">cron</span>: <span class="str">"0 8 * * *"</span>    <span class="cmt"># 每天8点</span>
+      <span class="prop">action</span>: <span class="str">"daily_briefing"</span>
+    - <span class="prop">cron</span>: <span class="str">"0 * * * *"</span>    <span class="cmt"># 每小时</span>
+      <span class="prop">action</span>: <span class="str">"check_alerts"</span>
+<span class="prop">---</span>
+    </div>
+  </section>
+
+  <!-- ⑨ SECURITY -->
+  <section id="security">
+    <div class="section-title">
+      <div class="num">9</div>
+      <span class="icon">🔐</span>
+      <span>安全与隐私模型</span>
+    </div>
+
+    <p style="color:var(--muted); margin-bottom:24px; font-size:14px;">
+      OpenClaw 的「本地优先」架构天然具备隐私优势，但「执行真实操作」的能力也带来了相应的安全考量。
+    </p>
+
+    <div class="sec-grid">
+      <div class="sec-item">
+        <div class="si-icon">🏠</div>
+        <div class="si-title">本地运行</div>
+        <div class="si-desc">所有数据、记忆、配置都存储在本机。无云端同步，数据不离开设备。</div>
+      </div>
+      <div class="sec-item">
+        <div class="si-icon">📜</div>
+        <div class="si-title">AGENTS.md 权限边界</div>
+        <div class="si-desc">通过 AGENTS.md 明确定义 Agent 的行为红线，禁止特定操作（如删除系统文件）。</div>
+      </div>
+      <div class="sec-item">
+        <div class="si-icon">🔑</div>
+        <div class="si-title">消息鉴权</div>
+        <div class="si-desc">Gateway 对每条入站消息进行 Provider 身份验证，防止未授权指令执行。</div>
+      </div>
+      <div class="sec-item">
+        <div class="si-icon">📦</div>
+        <div class="si-title">沙箱执行</div>
+        <div class="si-desc">代码执行 Skill 在独立沙箱进程中运行，限制资源访问范围，防止逃逸。</div>
+      </div>
+      <div class="sec-item">
+        <div class="si-icon">👁️</div>
+        <div class="si-title">操作审计日志</div>
+        <div class="si-desc">所有 Tool 调用均记录在 SQLite 日志中，支持事后审查每一步操作。</div>
+      </div>
+      <div class="sec-item">
+        <div class="si-icon">🚨</div>
+        <div class="si-title">CVE 注意事项</div>
+        <div class="si-desc">作为高权限本地 Agent，已发现 8 个 CVE。建议定期更新版本，不在公网裸露部署。</div>
+      </div>
+    </div>
+
+    <div class="callout warn" style="margin-top:20px">
+      <span class="ci-icon">⚠️</span>
+      <div class="ci-text">
+        <strong>生产部署建议：</strong>OpenClaw 拥有操作本地系统的高级权限，社区统计已有约 42,000 个裸机实例直接暴露在公网。强烈建议：① 使用防火墙限制访问 ② 配置 AGENTS.md 权限边界 ③ 及时跟进安全更新 ④ 生产环境避免使用 root 权限运行。
+      </div>
+    </div>
+
+    <!-- Overall summary -->
+    <div class="highlight-box" style="margin-top:32px">
+      <div class="hb-label">🎯 设计哲学总结</div>
+      <div class="hb-content-text" style="line-height:2; font-size:14px;">
+        OpenClaw 的底层逻辑可以用一句话总结：<br>
+        <strong>「以 Gateway 为枢纽，以 Agent Loop 为心脏，以 Skills 为四肢，以 Memory 为大脑，以 Heartbeat 为血液，打造一个能真正干活的本地 AI 自主体。」</strong>
+        <br><br>
+        它的架构创新在于三个彻底分离：
+        <strong>① 渠道与推理分离</strong>（Channel Adapter 与 Agent Runtime 解耦）、
+        <strong>② 能力与配置分离</strong>（Skills 文档化 + 热加载）、
+        <strong>③ 记忆与计算分离</strong>（三级记忆体系独立于 LLM）——
+        这三个分离让 OpenClaw 可以灵活扩展、持续演进。
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <div style="font-size:24px; margin-bottom:8px;">🦞</div>
+  <div>OpenClaw 底层逻辑原理 图文全解 · 整理自官方文档与技术社区资料</div>
+  <div style="margin-top:6px; font-size:12px; color:#475569;">Last updated: March 2026 · For learning purposes only</div>
+</footer>
+
+</body>
+</html>
