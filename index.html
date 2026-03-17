@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>周同学的学习之路</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .card {
+            display: block;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 12px;
+            text-decoration: none;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 2px solid #eee;
+        }
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+        .card-python {
+            background: linear-gradient(135deg, #3776ab 0%, #ffd43b 100%);
+            color: white;
+        }
+        .card-mysql {
+            background: linear-gradient(135deg, #00758f 0%, #e48e00 100%);
+            color: white;
+        }
+        .card-icon {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        .card-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .card-desc {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            color: #999;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📚 周同学的学习之路</h1>
+        <p class="subtitle">精选学习路线，助你快速成长</p>
+        
+        <a href="python-roadmap.html" class="card card-python">
+            <div class="card-icon">🐍</div>
+            <div class="card-title">Python 学习路线</div>
+            <div class="card-desc">0基础小白到就业 · 6-12个月完整规划</div>
+        </a>
+        
+        <a href="mysql-roadmap.html" class="card card-mysql">
+            <div class="card-icon">🗄️</div>
+            <div class="card-title">MySQL 学习路线</div>
+            <div class="card-desc">数据库入门到精通 · 8个月系统学习</div>
+        </a>
+        
+        <div class="footer">
+            由周同学整理 · 持续更新中
+        </div>
+    </div>
+</body>
+</html>
